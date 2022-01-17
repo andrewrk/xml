@@ -65,7 +65,7 @@ pub const Token = struct {
 };
 
 pub const ErrorNote = enum {
-    @"invalid byte",
+    invalid_byte,
 };
 
 pub fn next(xml: *Xml) Token {
@@ -76,16 +76,16 @@ pub fn next(xml: *Xml) Token {
             .start => switch (byte) {
                 ' ', '\t', '\r', '\n' => {},
                 '<' => xml.state = .doctype_q,
-                else => return xml.fail(.@"invalid byte"),
+                else => return xml.fail(.invalid_byte),
             },
             .doctype_q => switch (byte) {
                 ' ', '\t', '\r', '\n' => {},
                 '?' => xml.state = .doctype_name_start,
-                else => return xml.fail(.@"invalid byte"),
+                else => return xml.fail(.invalid_byte),
             },
             .doctype_name_start => switch (byte) {
                 ' ', '\t', '\r', '\n' => {},
-                '>', '<' => return xml.fail(.@"invalid byte"),
+                '>', '<' => return xml.fail(.invalid_byte),
                 else => {
                     tok_start = xml.index;
                     xml.state = .doctype_name;
@@ -100,13 +100,13 @@ pub fn next(xml: *Xml) Token {
                     .tag = .doctype,
                     .bytes = xml.bytes[tok_start..xml.index],
                 }),
-                '>', '<' => return xml.fail(.@"invalid byte"),
+                '>', '<' => return xml.fail(.invalid_byte),
                 else => {},
             },
             .doctype => switch (byte) {
                 ' ', '\t', '\r', '\n' => {},
                 '?' => xml.state = .doctype_end,
-                '<', '>' => return xml.fail(.@"invalid byte"),
+                '<', '>' => return xml.fail(.invalid_byte),
                 else => {
                     tok_start = xml.index;
                     xml.state = .doctype_attr_key;
@@ -117,7 +117,7 @@ pub fn next(xml: *Xml) Token {
                     .tag = .attr_key,
                     .bytes = xml.bytes[tok_start..xml.index],
                 }),
-                '?', '<', '>' => return xml.fail(.@"invalid byte"),
+                '?', '<', '>' => return xml.fail(.invalid_byte),
                 else => {},
             },
             .doctype_attr_value_q => switch (byte) {
@@ -125,19 +125,19 @@ pub fn next(xml: *Xml) Token {
                     xml.state = .doctype_attr_value;
                     tok_start = xml.index;
                 },
-                else => return xml.fail(.@"invalid byte"),
+                else => return xml.fail(.invalid_byte),
             },
             .doctype_attr_value => switch (byte) {
                 '"' => return xml.emit(.doctype, .{
                     .tag = .attr_value,
                     .bytes = xml.bytes[tok_start .. xml.index + 1],
                 }),
-                '\n' => return xml.fail(.@"invalid byte"),
+                '\n' => return xml.fail(.invalid_byte),
                 else => {},
             },
             .doctype_end => switch (byte) {
                 '>' => xml.state = .body,
-                else => return xml.fail(.@"invalid byte"),
+                else => return xml.fail(.invalid_byte),
             },
             .body => switch (byte) {
                 ' ', '\t', '\r', '\n' => {},
@@ -156,7 +156,7 @@ pub fn next(xml: *Xml) Token {
             },
             .tag_name_start => switch (byte) {
                 ' ', '\t', '\r', '\n' => {},
-                '>', '<' => return xml.fail(.@"invalid byte"),
+                '>', '<' => return xml.fail(.invalid_byte),
                 '/' => xml.state = .tag_close_start,
                 else => {
                     tok_start = xml.index;
@@ -165,7 +165,7 @@ pub fn next(xml: *Xml) Token {
             },
             .tag_close_start => switch (byte) {
                 ' ', '\t', '\r', '\n' => {},
-                '>', '<' => return xml.fail(.@"invalid byte"),
+                '>', '<' => return xml.fail(.invalid_byte),
                 else => {
                     tok_start = xml.index;
                     xml.state = .tag_close_name;
@@ -180,13 +180,13 @@ pub fn next(xml: *Xml) Token {
                     .tag = .tag_close,
                     .bytes = xml.bytes[tok_start..xml.index],
                 }),
-                '<' => return xml.fail(.@"invalid byte"),
+                '<' => return xml.fail(.invalid_byte),
                 else => {},
             },
             .tag_close_b => switch (byte) {
                 ' ', '\t', '\r', '\n' => {},
                 '>' => xml.state = .body,
-                else => return xml.fail(.@"invalid byte"),
+                else => return xml.fail(.invalid_byte),
             },
             .tag_name => switch (byte) {
                 ' ', '\t', '\r', '\n' => return xml.emit(.tag, .{
@@ -197,12 +197,12 @@ pub fn next(xml: *Xml) Token {
                     .tag = .tag_open,
                     .bytes = xml.bytes[tok_start..xml.index],
                 }),
-                '<' => return xml.fail(.@"invalid byte"),
+                '<' => return xml.fail(.invalid_byte),
                 else => {},
             },
             .tag => switch (byte) {
                 ' ', '\t', '\r', '\n' => {},
-                '<' => return xml.fail(.@"invalid byte"),
+                '<' => return xml.fail(.invalid_byte),
                 '>' => xml.state = .body,
                 '/' => {
                     tok_start = xml.index;
@@ -218,14 +218,14 @@ pub fn next(xml: *Xml) Token {
                     .tag = .tag_close_empty,
                     .bytes = xml.bytes[tok_start..xml.index],
                 }),
-                else => return xml.fail(.@"invalid byte"),
+                else => return xml.fail(.invalid_byte),
             },
             .tag_attr_key => switch (byte) {
                 '=' => return xml.emit(.tag_attr_value_q, .{
                     .tag = .attr_key,
                     .bytes = xml.bytes[tok_start..xml.index],
                 }),
-                '<', '>' => return xml.fail(.@"invalid byte"),
+                '<', '>' => return xml.fail(.invalid_byte),
                 else => {},
             },
             .tag_attr_value_q => switch (byte) {
@@ -233,14 +233,14 @@ pub fn next(xml: *Xml) Token {
                     xml.state = .tag_attr_value;
                     tok_start = xml.index;
                 },
-                else => return xml.fail(.@"invalid byte"),
+                else => return xml.fail(.invalid_byte),
             },
             .tag_attr_value => switch (byte) {
                 '"' => return xml.emit(.tag, .{
                     .tag = .attr_value,
                     .bytes = xml.bytes[tok_start .. xml.index + 1],
                 }),
-                '\n' => return xml.fail(.@"invalid byte"),
+                '\n' => return xml.fail(.invalid_byte),
                 else => {},
             },
         }
