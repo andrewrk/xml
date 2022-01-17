@@ -36,6 +36,13 @@ pub const Token = struct {
         /// * `tag_close`
         /// * `content`
         tag_close,
+        /// Emitted for empty nodes such as "<head/>".
+        /// `bytes` will contain the "/".
+        /// Possible next tags:
+        /// * `tag_open`
+        /// * `tag_close`
+        /// * `content`
+        tag_close_empty,
         /// Only the name of the key, does not include the '=' or the value.
         /// Possible next tags:
         /// * `attr_value`
@@ -197,10 +204,21 @@ pub fn next(xml: *Xml) Token {
                 ' ', '\t', '\r', '\n' => {},
                 '<' => return xml.fail(.@"invalid byte"),
                 '>' => xml.state = .body,
+                '/' => {
+                    tok_start = xml.index;
+                    xml.state = .tag_end_empty;
+                },
                 else => {
                     tok_start = xml.index;
                     xml.state = .tag_attr_key;
                 },
+            },
+            .tag_end_empty => switch (byte) {
+                '>' => return xml.emit(.body, .{
+                    .tag = .tag_close_empty,
+                    .bytes = xml.bytes[tok_start..xml.index],
+                }),
+                else => return xml.fail(.@"invalid byte"),
             },
             .tag_attr_key => switch (byte) {
                 '=' => return xml.emit(.tag_attr_value_q, .{
@@ -260,6 +278,7 @@ const State = enum {
     tag_close_start,
     tag_close_name,
     tag_close_b,
+    tag_end_empty,
 };
 
 fn fail(xml: *Xml, note: ErrorNote) Token {
@@ -299,6 +318,54 @@ test "hello world xml" {
     try testExpect(&xml, .tag_open, "map");
     try testExpect(&xml, .tag_close, "map");
     try testExpect(&xml, .eof, "");
+    try testExpect(&xml, .eof, "");
+}
+
+test "some props" {
+    const bytes =
+        \\<?xml?>
+        \\<map>
+        \\ <properties>
+        \\  <property name="gravity" type="float" value="12.34"/>
+        \\  <property name="never gonna give you up" type="bool" value="true"/>
+        \\  <property name="never gonna let you down" type="bool" value="true"/>
+        \\ </properties>
+        \\</map>
+    ;
+    var xml: Xml = .{ .bytes = bytes };
+    try testExpect(&xml, .doctype, "xml");
+    try testExpect(&xml, .tag_open, "map");
+    try testExpect(&xml, .tag_open, "properties");
+
+    try testExpect(&xml, .tag_open, "property");
+    try testExpect(&xml, .attr_key, "name");
+    try testExpect(&xml, .attr_value, "\"gravity\"");
+    try testExpect(&xml, .attr_key, "type");
+    try testExpect(&xml, .attr_value, "\"float\"");
+    try testExpect(&xml, .attr_key, "value");
+    try testExpect(&xml, .attr_value, "\"12.34\"");
+    try testExpect(&xml, .tag_close_empty, "/");
+
+    try testExpect(&xml, .tag_open, "property");
+    try testExpect(&xml, .attr_key, "name");
+    try testExpect(&xml, .attr_value, "\"never gonna give you up\"");
+    try testExpect(&xml, .attr_key, "type");
+    try testExpect(&xml, .attr_value, "\"bool\"");
+    try testExpect(&xml, .attr_key, "value");
+    try testExpect(&xml, .attr_value, "\"true\"");
+    try testExpect(&xml, .tag_close_empty, "/");
+
+    try testExpect(&xml, .tag_open, "property");
+    try testExpect(&xml, .attr_key, "name");
+    try testExpect(&xml, .attr_value, "\"never gonna let you down\"");
+    try testExpect(&xml, .attr_key, "type");
+    try testExpect(&xml, .attr_value, "\"bool\"");
+    try testExpect(&xml, .attr_key, "value");
+    try testExpect(&xml, .attr_value, "\"true\"");
+    try testExpect(&xml, .tag_close_empty, "/");
+
+    try testExpect(&xml, .tag_close, "properties");
+    try testExpect(&xml, .tag_close, "map");
     try testExpect(&xml, .eof, "");
 }
 
