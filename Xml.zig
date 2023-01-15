@@ -156,6 +156,7 @@ pub fn next(xml: *Xml) Token {
             },
             .tag_name_start => switch (byte) {
                 ' ', '\t', '\r', '\n' => {},
+                '!' => xml.state = .comment_start,
                 '>', '<' => return xml.fail(.invalid_byte),
                 '/' => xml.state = .tag_close_start,
                 else => {
@@ -243,6 +244,19 @@ pub fn next(xml: *Xml) Token {
                 '\n' => return xml.fail(.invalid_byte),
                 else => {},
             },
+            .comment_start => switch (byte) {
+                '-' => xml.state = .comment_body,
+                else => return xml.fail(.invalid_byte),
+            },
+            .comment_body => switch (byte) {
+                '-' => xml.state = .comment_end_maybe,
+                else => {},
+            },
+            .comment_end_maybe => switch (byte) {
+                '-' => {},
+                '>' => xml.state = .body,
+                else => xml.state = .comment_body,
+            },
         }
         xml.advanceCursor();
     }
@@ -279,6 +293,9 @@ const State = enum {
     tag_close_name,
     tag_close_b,
     tag_end_empty,
+    comment_start,
+    comment_body,
+    comment_end_maybe,
 };
 
 fn fail(xml: *Xml, note: ErrorNote) Token {
@@ -366,6 +383,35 @@ test "some props" {
 
     try testExpect(&xml, .tag_close, "properties");
     try testExpect(&xml, .tag_close, "map");
+    try testExpect(&xml, .eof, "");
+}
+
+test "comments" {
+    const bytes =
+        \\<?xml?>
+        \\ <!-- This is a multi-
+        \\       line comment, Rick -->
+        \\ <property name="rolled" type="bool" value="true"/>
+    ;
+    var xml: Xml = .{ .bytes = bytes };
+    try testExpect(&xml, .doctype, "xml");
+    try testExpect(&xml, .tag_open, "property");
+    try testExpect(&xml, .attr_key, "name");
+    try testExpect(&xml, .attr_value, "\"rolled\"");
+    try testExpect(&xml, .attr_key, "type");
+    try testExpect(&xml, .attr_value, "\"bool\"");
+    try testExpect(&xml, .attr_key, "value");
+    try testExpect(&xml, .attr_value, "\"true\"");
+    try testExpect(&xml, .tag_close_empty, "/");
+}
+
+test "eof mid-comment" {
+    const bytes =
+        \\<?xml?>
+        \\ <!
+    ;
+    var xml: Xml = .{ .bytes = bytes };
+    try testExpect(&xml, .doctype, "xml");
     try testExpect(&xml, .eof, "");
 }
 
