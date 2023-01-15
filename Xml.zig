@@ -156,13 +156,7 @@ pub fn next(xml: *Xml) Token {
             },
             .tag_name_start => switch (byte) {
                 ' ', '\t', '\r', '\n' => {},
-                '!' => {
-                    if (std.mem.eql(u8, xml.bytes[xml.index + 1 .. xml.index + 3], "--")) {
-                        xml.advanceCursor();
-                        xml.advanceCursor();
-                        xml.state = .skip_comment;
-                    }
-                },
+                '!' => xml.state = .comment_start,
                 '>', '<' => return xml.fail(.invalid_byte),
                 '/' => xml.state = .tag_close_start,
                 else => {
@@ -250,15 +244,18 @@ pub fn next(xml: *Xml) Token {
                 '\n' => return xml.fail(.invalid_byte),
                 else => {},
             },
-            .skip_comment => switch (byte) {
-                '-' => {
-                    if (std.mem.eql(u8, xml.bytes[xml.index + 1 .. xml.index + 3], "->")) {
-                        xml.advanceCursor();
-                        xml.advanceCursor();
-                        xml.state = .body;
-                    }
-                },
+            .comment_start => switch (byte) {
+                '-' => xml.state = .comment_body,
+                else => return xml.fail(.invalid_byte),
+            },
+            .comment_body => switch (byte) {
+                '-' => xml.state = .comment_end_maybe,
                 else => {},
+            },
+            .comment_end_maybe => switch (byte) {
+                '-' => {},
+                '>' => xml.state = .body,
+                else => xml.state = .comment_body,
             },
         }
         xml.advanceCursor();
@@ -296,7 +293,9 @@ const State = enum {
     tag_close_name,
     tag_close_b,
     tag_end_empty,
-    skip_comment,
+    comment_start,
+    comment_body,
+    comment_end_maybe,
 };
 
 fn fail(xml: *Xml, note: ErrorNote) Token {
@@ -404,6 +403,16 @@ test "comments" {
     try testExpect(&xml, .attr_key, "value");
     try testExpect(&xml, .attr_value, "\"true\"");
     try testExpect(&xml, .tag_close_empty, "/");
+}
+
+test "eof mid-comment" {
+    const bytes =
+        \\<?xml?>
+        \\ <!
+    ;
+    var xml: Xml = .{ .bytes = bytes };
+    try testExpect(&xml, .doctype, "xml");
+    try testExpect(&xml, .eof, "");
 }
 
 fn testExpect(xml: *Xml, tag: Token.Tag, bytes: []const u8) !void {
