@@ -1,5 +1,10 @@
 //! XML tokenizer. Takes the entire input buffer as the input; provides a
 //! streaming, non-allocating API to pull tokens one at a time.
+const Xml = @This();
+
+const std = @import("std");
+const assert = std.debug.assert;
+const testing = std.testing;
 
 bytes: []const u8,
 index: usize = 0,
@@ -266,11 +271,6 @@ pub fn next(xml: *Xml) Token {
     };
 }
 
-const Xml = @This();
-const std = @import("std");
-const assert = std.debug.assert;
-const testing = std.testing;
-
 const State = enum {
     start,
     doctype_q,
@@ -421,20 +421,24 @@ fn testExpect(xml: *Xml, tag: Token.Tag, bytes: []const u8) !void {
     try testing.expectEqualStrings(bytes, tok.bytes);
 }
 
-pub fn main() !void {
-    var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-    const args = try std.process.argsAlloc(arena);
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const arena = init.arena.allocator();
+    const args = try init.minimal.args.toSlice(arena);
     const input_file = args[1];
-    const max_bytes = std.math.maxInt(u32);
-    var xml: Xml = .{ .bytes = try std.fs.cwd().readFileAlloc(arena, input_file, max_bytes) };
-    var bw = std.io.bufferedWriter(std.io.getStdOut().writer());
-    const writer = bw.writer();
+    var xml: Xml = .{ .bytes = try std.Io.Dir.cwd().readFileAlloc(io, input_file, arena, .unlimited) };
+    var buffer: [2000]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writerStreaming(io, &buffer);
+    printTokens(&xml, &stdout_writer.interface) catch |err| switch (err) {
+        error.WriteFailed => return stdout_writer.err.?,
+    };
+    try stdout_writer.flush();
+}
+
+fn printTokens(xml: *Xml, w: *std.Io.Writer) !void {
     while (true) {
         const token = xml.next();
-        try writer.print("{s}: {s}\n", .{ @tagName(token.tag), token.bytes });
+        try w.print("{s}: {s}\n", .{ @tagName(token.tag), token.bytes });
         if (token.tag == .eof) break;
     }
-    try bw.flush();
 }
